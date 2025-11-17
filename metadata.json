@@ -1,0 +1,8 @@
+
+{
+  "name": "MultiPowerAI Dream Team",
+  "description": "A sophisticated SaaS application where four distinct AI personas collaborate in real-time circular conversations to solve complex problems, offering deeper insights and cross-validated solutions.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

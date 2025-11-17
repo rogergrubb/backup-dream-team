@@ -1,0 +1,133 @@
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
+const { GoogleGenAI } = require("@google/genai");
+const OpenAI = require("openai");
+const Anthropic = require("@anthropic-ai/sdk");
+
+admin.initializeApp();
+
+exports.dreamTeamStream = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers for preflight requests
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+  
+  try {
+    const idToken = req.headers.authorization?.split("Bearer ")[1];
+    if (!idToken) {
+      res.status(401).json({ error: "User not authenticated." });
+      return;
+    }
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+
+    const { type, profile, prompt, context } = req.body;
+    
+    const provider = type === "summarize" ? "gemini" : profile.provider;
+
+    const userApiKeysRef = admin.firestore().collection("userApiKeys").doc(uid);
+    const docSnap = await userApiKeysRef.get();
+    
+    if (!docSnap.exists || !docSnap.data()[provider]) {
+       res.setHeader("Content-Type", "text/event-stream");
+       res.write(`data: ${JSON.stringify({ text: `This is a mocked response from the secure server. The API key for '${provider}' is not configured in your account.` })}\n\n`);
+       res.end();
+       return;
+    }
+    
+    const apiKey = docSnap.data()[provider];
+
+    if (type === 'generate') {
+        let fullPrompt = prompt;
+        if (context && context.length > 0) {
+          const history = context.map((msg) => `Output from agent "${msg.aiId}":\n${msg.content}`).join('\n\n');
+          fullPrompt = `The main goal is: "${prompt}"\n\nHere is the discussion so far:\n\n${history}\n\nBased on all the information above, provide your contribution.`;
+        }
+        
+        if (provider === 'gemini') {
+            const ai = new GoogleGenAI({ apiKey });
+            const responseStream = await ai.models.generateContentStream({
+                model: profile.model,
+                contents: {
+                  role: 'user',
+                  parts: [{ text: fullPrompt }]
+                },
+                config: {
+                    systemInstruction: profile.systemInstruction,
+                },
+            });
+            
+            res.setHeader("Content-Type", "text/event-stream");
+            for await (const chunk of responseStream) {
+                const chunkText = chunk.text;
+                if (chunkText) {
+                    res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+                }
+            }
+            res.end();
+            
+        } else if (provider === 'openai') {
+            const openai = new OpenAI({ apiKey });
+            const stream = await openai.chat.completions.create({
+                model: profile.model,
+                messages: [
+                    { role: "system", content: profile.systemInstruction },
+                    { role: "user", content: fullPrompt }
+                ],
+                stream: true,
+            });
+            
+            res.setHeader("Content-Type", "text/event-stream");
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content;
+                if (content) {
+                    res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
+                }
+            }
+            res.end();
+            
+        } else if (provider === 'anthropic') {
+            const anthropic = new Anthropic({ apiKey });
+            const stream = await anthropic.messages.stream({
+                model: profile.model,
+                max_tokens: 4096,
+                system: profile.systemInstruction,
+                messages: [
+                    { role: "user", content: fullPrompt }
+                ],
+            });
+            
+            res.setHeader("Content-Type", "text/event-stream");
+            for await (const chunk of stream) {
+                if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                    res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+                }
+            }
+            res.end();
+            
+        } else {
+            // Fallback for other providers
+            res.setHeader("Content-Type", "text/event-stream");
+            res.write(`data: ${JSON.stringify({ text: `(Mocked Server Response) Provider '${provider}' is not yet implemented. Agent: ${profile.name} (${profile.model})` })}\n\n`);
+            res.end();
+        }
+        
+    } else if (type === 'summarize') {
+        res.status(200).json({
+            title: "Mocked Summary from Server",
+            overview: "This summary was generated by the secure backend.",
+            points: [{ point: "The backend successfully processed the request.", sourceMessageIds: [] }]
+        });
+    } else {
+        res.status(400).json({ error: "Invalid request type" });
+    }
+  } catch (error) {
+    console.error("Error in Cloud Function:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
