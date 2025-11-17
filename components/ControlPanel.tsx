@@ -25,9 +25,21 @@ const Step1Task: React.FC<{
             {recentQueries.length > 0 && (
                 <div>
                     <h4 className="text-sm font-semibold text-gray-400 mb-2">Recent Queries</h4>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                         {recentQueries.map((query, i) => (
-                            <button key={i} onClick={() => setPrompt(query)} className="w-full text-left text-xs p-2 bg-gray-800/50 hover:bg-gray-700/50 rounded-md text-gray-400">
+                            <button 
+                                key={i} 
+                                onClick={() => setPrompt(query)} 
+                                className="w-full text-left text-xs p-2 bg-gray-800/50 hover:bg-gray-700/50 rounded-md text-gray-400 transition-colors"
+                                style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 5,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}
+                                title={query}
+                            >
                                 {query}
                             </button>
                         ))}

@@ -198,9 +198,9 @@ export const ConversationDisplay: React.FC<ConversationDisplayProps> = ({ conver
   const renderWelcome = () => (
     <div className="flex flex-col items-center justify-center text-center p-8 text-gray-500 h-full">
         <div className="flex -space-x-4 mb-6">
-            {team.slice(0, 5).map(profile => {
+            {team.slice(0, 5).map((profile, index) => {
                 const Avatar = AVATAR_MAP[profile.avatar];
-                return <Avatar key={profile.id} className={`h-16 w-16 rounded-full bg-gray-800 p-2 border-2 ${profile.color} shadow-lg`}/>
+                return <Avatar key={`welcome-${profile.id}-${index}`} className={`h-16 w-16 rounded-full bg-gray-800 p-2 border-2 ${profile.color} shadow-lg`}/>
             })}
         </div>
         <h2 className="text-2xl font-bold text-gray-300">Welcome to the Dream Team</h2>
